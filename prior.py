@@ -1,18 +1,21 @@
+import torch
+
 class StaticFeatureAttributionPrior:
-    def __init__(self, explainer, prior_feature, ignored_features):
+    def __init__(self, explainer, prior_feature, ignored_features, background_dataset):
         super(StaticFeatureAttributionPrior, self).__init__()
         self.explainer = explainer
         self.prior_feature = prior_feature
         self.ignored_features = ignored_features
+        self.background_dataset = background_dataset
 
-    def penalty(self, model, features, alpha):
-        # Short circuit and don't calculate feature attributions if we don't need them
-        if alpha == 0:
-            return 0
-
-        shap_values = self.explainer.shap_values(model, features)
+    def penalty(self, model, features):
+        prior_feature = torch.FloatTensor(self.prior_feature).cuda()
+        explainer_for_batch = self.explainer(self.background_dataset, features.shape[0], k=2)
+        shap_values = explainer_for_batch.shap_values(model, features)
         eg_no_drugs = shap_values[:, len(self.ignored_features):]
-        attribution_diff = eg_no_drugs - self.prior_feature
-        prior_penalty = alpha*(attribution_diff ** 2).mean()
+        attribution_diff = eg_no_drugs - prior_feature
 
-        return alpha * prior_penalty
+        #FIXME: Hardcoded 20 here for SCORE feature
+        prior_penalty = (attribution_diff ** 2).mean() / 20
+
+        return prior_penalty

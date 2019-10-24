@@ -28,21 +28,6 @@ parser.add_argument(
     required=True
 )
 parser.add_argument(
-    "--lambda_start",
-    help="Starting coefficient for sequence of prior lambdas",
-    type=float
-)
-parser.add_argument(
-    "--lambda_end",
-    help="Final coefficient for sequence of prior lambdas",
-    type=float
-)
-parser.add_argument(
-    "--num_lambdas",
-    help="How many lambda values to test (between the start + final)",
-    type=int
-)
-parser.add_argument(
     "--include_baseline",
     help="Whether to include an additional MLP baseline (i.e., lambda=0)",
     type=bool
@@ -53,8 +38,9 @@ args = parser.parse_args()
 response_data = ExVivoDrugData.load_data()
 merge_data = MergeData.load_data()
 
-response_data.ensure_overlap_with_prior(merge_data)
-merge_data.ensure_overlap_with_response(response_data)
+overlapping_genes = list(set(response_data.X.columns).intersection(merge_data.data.columns))
+merge_data.data = merge_data.data[overlapping_genes]
+response_data.X = response_data.X[["patient_id"] + response_data.drug_columns + overlapping_genes]
 
 logging.info("Splitting data:")
 for train_test_split in response_data.kfold_patient_split(5):
@@ -80,8 +66,8 @@ for train_test_split in response_data.kfold_patient_split(5):
     y_test[y_test.columns] = outcome_scaler.transform(y_test[y_test.columns])
     logging.info("Finished scaling features")
 
+    non_drug_cols = [x for x in X_train.columns if "drug_" not in x]
     prior_feature = merge_data.get_feature(args.prior_feature)
-    prior_feature = torch.FloatTensor(prior_feature).cuda().reshape(-1,)
 
     # N is batch size; D_in is input dimension;
     # H is hidden dimension; D_out is output dimension.
@@ -106,33 +92,14 @@ for train_test_split in response_data.kfold_patient_split(5):
     )
 
     background_dataset = ExVivoDrugData(X_train, y_train)
-    APExp = AttributionPriorExplainer(background_dataset, N, k=2)
 
     attribution_prior = StaticFeatureAttributionPrior(
-        explainer=APExp, prior_feature=prior_feature, ignored_features=response_data.drug_columns)
-    epochs = 60
-
-    prior_alphas = np.linspace(
-        start=args.alpha_start,
-        stop=args.alpha_end,
-        num=args.alpha_lambdas
+        explainer=AttributionPriorExplainer,
+        prior_feature=prior_feature,
+        ignored_features=response_data.drug_columns,
+        background_dataset=background_dataset
     )
 
+    epochs = 30
     model = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=0.2).cuda().float()
-
-    train(0.0, model, epochs, train_loader, test_loader, attribution_prior)
-    exit(0)
-    #lambdas_and_losses = []
-
-    #if args.include_baseline:
-    #lambdas_and_losses.append((0.0, ))
-    #exit(0)
-
-    #for alpha in prior_alphas:
-    #    lambdas_and_losses.append((alpha, train(alpha, model, epochs, )))
-
-    #for (lambda_value, loss) in lambdas_and_losses:
-    #    print("{} : {}".format(lambda_value, loss))
-
-    #with open("results.p", "wb") as handle:
-    #    pickle.dump(lambdas_and_losses, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    train(model, epochs, train_loader, test_loader, attribution_prior)

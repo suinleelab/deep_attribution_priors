@@ -1,10 +1,22 @@
-import torch.optim as optim
+import logging
+from prior import StaticFeatureAttributionPrior
+from torch.utils.data import DataLoader
 import numpy as np
+import torch.optim as optim
 
-def train(alpha, model, epochs, training_data, test_data, attribution_prior):
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
 
-    print("Training model with prior penalty {}".format(alpha))
+def train(model,
+          epochs: int,
+          training_data: DataLoader,
+          test_data: DataLoader,
+          attribution_prior: StaticFeatureAttributionPrior):
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=1e-5,
+        weight_decay=1e-4
+    )
+
+    logging.info("Training model using\n{}\nfor prior penalty".format(attribution_prior.prior_feature))
     for epoch in range(epochs):
         model.train()
 
@@ -17,9 +29,9 @@ def train(alpha, model, epochs, training_data, test_data, attribution_prior):
             optimizer.zero_grad()
             outputs = model(features)
 
-            loss = model.criterion(outputs, labels) + attribution_prior.penalty(model, features, alpha)
+            loss = model.criterion(outputs, labels) + attribution_prior.penalty(model, features)
 
-            loss.backward(retain_graph=True)
+            loss.backward()
             optimizer.step()
             train_losses.append(loss.item())
 
@@ -28,16 +40,9 @@ def train(alpha, model, epochs, training_data, test_data, attribution_prior):
             features, labels = features.cuda().float(), labels.cuda().float()
             outputs = model(features)
             valid_losses.append(model.criterion(outputs, labels).detach().cpu().numpy())
-            shap_values = attribution_prior.explainer.shap_values(model, features)
-            eg_no_drugs = shap_values[:, len(attribution_prior.ignored_features):]
-            shap_sums = np.abs(eg_no_drugs).sum()
-            shap_stdevs = eg_no_drugs.stdev()
-
-            for (shap_sum, shap_stdev) in zip(shap_sums, shap_stdevs):
-                print("{}, {}".format(shap_sum, shap_stdev))
 
         valid_loss = np.mean(valid_losses)
 
-        if epoch % 10 == 0:
-            print(epoch, np.mean(train_losses), valid_loss)
+        logging.info("{}, {}, {}".format(epoch, np.mean(train_losses), valid_loss))
+
     return valid_loss

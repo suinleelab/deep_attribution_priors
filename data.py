@@ -49,10 +49,6 @@ class MergeData(PriorData):
     def get_feature(self, feature):
         return self.data.loc[feature]
 
-    def ensure_overlap_with_response(self, response_data):
-        overlapping_genes = list(set(response_data.X.columns).intersection(self.data.columns))
-        self.data = self.data[overlapping_genes]
-
     @staticmethod
     def load_data():
         # MERGE dataframe comes with driver features as columns, and genes as rows.  We want the opposite to conform
@@ -96,11 +92,6 @@ class ExVivoDrugData(ResponseData):
         super(ExVivoDrugData, self).__init__(X=X, y=y)
         self.drug_columns = [col for col in self.X.columns if 'drug_' in col]
 
-    def ensure_overlap_with_prior(self, prior_data):
-        assert(isinstance(prior_data, PriorData))
-        overlapping_genes = list(set(self.X.columns).intersection(prior_data.data.columns))
-        self.X = self.X[["patient_id"] + self.drug_columns + overlapping_genes]
-
     # Split by patient
     def kfold_patient_split(self, n_splits):
         logging.info("Splitting drug response data into {} folds".format(n_splits))
@@ -132,14 +123,14 @@ class ExVivoDrugData(ResponseData):
         y_for_patients = self.y[self.y.patient_id.isin(patient_ids)].drop(columns="patient_id")
         return X_for_patients, y_for_patients
 
-    #FIXME:
+    #FIXME
     # We're loading the patient ID here, but then tossing it once we look at specific train/test splits.
     # Would be nice to have a better abstraction that captures this, so that we don't accidentally have ids
     # in places we shouldn't (or vice-versa)
     @staticmethod
     def load_data():
         logging.info("Loading drug response data")
-        DATADIR = '/fdata/ohsu_data/'
+        DATADIR = '../fdata/ohsu_data/'
         final_frame = pickle.load(open(DATADIR + 'final_frame.p', 'rb'))
         X = pickle.load(open(DATADIR + 'X_rna_seq_final.p', 'rb'))
         y = final_frame[["patient_id", "IC50"]]
