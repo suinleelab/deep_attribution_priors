@@ -4,7 +4,6 @@ import operator
 import torch
 from torch.autograd import grad
 from torch.utils.data import DataLoader
-from IPython.core.debugger import set_trace
 
 def gather_nd(params, indices):
     """

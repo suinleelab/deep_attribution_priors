@@ -75,8 +75,9 @@ for train_test_split in response_data.kfold_patient_split(5):
     logging.info("Applying feature scalar")
     X_train[X_train.columns] = feature_scaler.transform(X_train[X_train.columns])
     X_test[X_test.columns] = feature_scaler.transform(X_test[X_test.columns])
+
     y_train[y_train.columns] = outcome_scaler.transform(y_train[y_train.columns])
-    y_test[y_test.columms] = outcome_scaler.transform(y_test[y_test.columns])
+    y_test[y_test.columns] = outcome_scaler.transform(y_test[y_test.columns])
     logging.info("Finished scaling features")
 
     prior_feature = merge_data.get_feature(args.prior_feature)
