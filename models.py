@@ -4,7 +4,7 @@ import torch
 class MLP(torch.nn.Module):
     def __init__(self, D_in, H1, H2, D_out, dropout):
         super(MLP, self).__init__()
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.MSELoss(reduction='none')
         self.layers = torch.nn.Sequential(
             torch.nn.Linear(D_in, H1),
             torch.nn.ReLU(),

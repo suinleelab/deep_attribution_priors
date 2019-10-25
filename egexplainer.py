@@ -215,7 +215,7 @@ class ExpectedGradientsModel(torch.nn.Module):
     produces SHAP values as well as predictions (controllable by 'shap_values'
     flag.
     """
-    def __init__(self,base_model,refset,k=1):
+    def __init__(self, base_model, refset, k=1):
         """
         Arguments:
         base_model: PyTorch network that subclasses torch.nn.Module
@@ -228,17 +228,16 @@ class ExpectedGradientsModel(torch.nn.Module):
         self.base = base_model
         self.refset = refset
         self.exp = VariableBatchExplainer(self.refset)
-    def forward(self,x,shap_values=False,sparse_labels=None,k=1):
+
+    def forward(self, x, shap_values=True, k=1):
         """
         Arguments:
         x: PyTorch tensor to predict with, as in normal torch.nn.Module API
         shap_values:     Binary flag -- whether to produce SHAP values
-        sparse_labels:  np.array of sparse integer labels, i.e. 0-9 for MNIST. Used if you only
-            want to explain the prediction for the true class per sample.
         k: int - Number of references to use default for explanations. As low as 1 for training.
             100-200 for reliable explanations. 
         """
         output = self.base(x)
         if not shap_values: return output
-        else: shaps = self.exp.shap_values(self.base,x,sparse_labels=sparse_labels,k=k)
+        else: shaps = self.exp.shap_values(self.base,x,k=k)
         return output, shaps

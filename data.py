@@ -95,7 +95,7 @@ class ExVivoDrugData(ResponseData):
     # Split by patient
     def kfold_patient_split(self, n_splits):
         logging.info("Splitting drug response data into {} folds".format(n_splits))
-        kf = KFold(n_splits=n_splits)
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         patient_ids = self.X.patient_id.unique()
         train_test_splits = []
 

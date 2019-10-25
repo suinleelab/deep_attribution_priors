@@ -1,4 +1,5 @@
 import torch
+import pdb
 
 class StaticFeatureAttributionPrior:
     def __init__(self, explainer, prior_feature, ignored_features, background_dataset):
@@ -8,14 +9,10 @@ class StaticFeatureAttributionPrior:
         self.ignored_features = ignored_features
         self.background_dataset = background_dataset
 
-    def penalty(self, model, features):
+    def penalty(self, shap_values):
+        #pdb.set_trace()
         prior_feature = torch.FloatTensor(self.prior_feature).cuda()
-        explainer_for_batch = self.explainer(self.background_dataset, features.shape[0], k=2)
-        shap_values = explainer_for_batch.shap_values(model, features)
         eg_no_drugs = shap_values[:, len(self.ignored_features):]
-        attribution_diff = eg_no_drugs - prior_feature
-
-        #FIXME: Hardcoded 20 here for SCORE feature
-        prior_penalty = (attribution_diff ** 2).mean() / 20
+        prior_penalty = torch.sum(((eg_no_drugs * 1000 - prior_feature) ** 2), dim=1) / 100000
 
         return prior_penalty

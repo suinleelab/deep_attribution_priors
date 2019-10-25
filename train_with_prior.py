@@ -1,5 +1,6 @@
 from data import ExVivoDrugData, MergeData
 import logging
+from egexplainer import ExpectedGradientsModel
 from sklearn.preprocessing import StandardScaler
 from data import ExVivoDrugData
 from prior import StaticFeatureAttributionPrior
@@ -27,10 +28,19 @@ parser.add_argument(
     type=str,
     required=True
 )
+
 parser.add_argument(
-    "--include_baseline",
-    help="Whether to include an additional MLP baseline (i.e., lambda=0)",
-    type=bool
+    "--epochs",
+    help="Number of training epochs",
+    type=int,
+    required=True
+)
+
+parser.add_argument(
+    "--dropout",
+    help="Dropout rate for neural network models",
+    type=float,
+    default=0.2
 )
 
 args = parser.parse_args()
@@ -66,9 +76,6 @@ for train_test_split in response_data.kfold_patient_split(5):
     y_test[y_test.columns] = outcome_scaler.transform(y_test[y_test.columns])
     logging.info("Finished scaling features")
 
-    non_drug_cols = [x for x in X_train.columns if "drug_" not in x]
-    prior_feature = merge_data.get_feature(args.prior_feature)
-
     # N is batch size; D_in is input dimension;
     # H is hidden dimension; D_out is output dimension.
     N, D_in, H1, H2, D_out = 32*2*2, X_train.shape[1], 512, 256, 1
@@ -92,14 +99,19 @@ for train_test_split in response_data.kfold_patient_split(5):
     )
 
     background_dataset = ExVivoDrugData(X_train, y_train)
+    if args.prior_feature != "NONE":
+        prior_feature = merge_data.get_feature(args.prior_feature)
+        base_model = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=args.dropout).cuda().float()
+        model = ExpectedGradientsModel(base_model=base_model, refset=background_dataset)
+        attribution_prior = StaticFeatureAttributionPrior(
+            explainer=AttributionPriorExplainer,
+            prior_feature=prior_feature,
+            ignored_features=response_data.drug_columns,
+            background_dataset=background_dataset
+        )
+    else:
+        model = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=args.dropout).cuda().float()
+        attribution_prior = None
 
-    attribution_prior = StaticFeatureAttributionPrior(
-        explainer=AttributionPriorExplainer,
-        prior_feature=prior_feature,
-        ignored_features=response_data.drug_columns,
-        background_dataset=background_dataset
-    )
-
-    epochs = 30
-    model = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=0.2).cuda().float()
+    epochs = 100
     train(model, epochs, train_loader, test_loader, attribution_prior)
