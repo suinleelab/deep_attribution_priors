@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 import pickle
 import pandas as pd
 import logging
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
@@ -10,10 +10,32 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+class Experiment:
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
+
+        split = TrainTestSplit(X, y)
+        self.train_dataset = BasicDataset(split.X_train, split.y_train)
+        self.test_dataset = BasicDataset(split.X_test, split.y_test)
+
+class BasicDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, index):
+        sample = self.X[index]
+        sample_label = self.y[index]
+        return sample, sample_label
 
 class TrainTestSplit:
-    def __init__(self, X_train, X_test, y_train, y_test):
+    def __init__(self, X, y, test_size=0.2):
         super(TrainTestSplit, self).__init__()
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
