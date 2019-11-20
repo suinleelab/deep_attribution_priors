@@ -11,11 +11,11 @@ logging.basicConfig(
 )
 
 class Experiment:
-    def __init__(self, X, y):
+    def __init__(self, X, y, test_size=0.2):
         self.X = X
         self.y = y
 
-        split = TrainTestSplit(X, y)
+        split = TrainTestSplit.from_data(X, y, test_size=test_size)
         self.train_dataset = BasicDataset(split.X_train, split.y_train)
         self.test_dataset = BasicDataset(split.X_test, split.y_test)
 
@@ -33,13 +33,17 @@ class BasicDataset(Dataset):
         return sample, sample_label
 
 class TrainTestSplit:
-    def __init__(self, X, y, test_size=0.2):
+    def __init__(self, X_train, X_test, y_train, y_test):
         super(TrainTestSplit, self).__init__()
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
+
+    @staticmethod
+    def from_data(X, y, test_size):
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
+        return TrainTestSplit(X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
 
 
 class PriorData(Dataset):
@@ -82,6 +86,7 @@ class MergeData(PriorData):
         df = df[1:]  # take the data less the header row
         df.columns = new_header  # set the header row as the df header
         df = df.astype(float)
+        df.drop(["SCORE", "#SIGPVALS"], axis=0, inplace=True)
         logging.info("Merge data loaded")
         return MergeData(df)
 
@@ -141,8 +146,8 @@ class ExVivoDrugData(ResponseData):
         return train_test_splits
 
     def data_for_patients(self, patient_ids):
-        X_for_patients = self.X[self.X.patient_id.isin(patient_ids)].drop(columns="patient_id")
-        y_for_patients = self.y[self.y.patient_id.isin(patient_ids)].drop(columns="patient_id")
+        X_for_patients = self.X[self.X.patient_id.isin(patient_ids)]
+        y_for_patients = self.y[self.y.patient_id.isin(patient_ids)]
         return X_for_patients, y_for_patients
 
     #FIXME
@@ -152,7 +157,7 @@ class ExVivoDrugData(ResponseData):
     @staticmethod
     def load_data():
         logging.info("Loading drug response data")
-        DATADIR = '../fdata/ohsu_data/'
+        DATADIR = '/fdata/ohsu_data/'
         final_frame = pickle.load(open(DATADIR + 'final_frame.p', 'rb'))
         X = pickle.load(open(DATADIR + 'X_rna_seq_final.p', 'rb'))
         y = final_frame[["patient_id", "IC50"]]
