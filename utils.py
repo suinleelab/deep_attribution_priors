@@ -10,8 +10,7 @@ class EarlyStopping:
         Args:
             patience (int): How long to wait after last time validation loss improved.
                             Default: 7
-            verbose (bool): If True, prints a message for each validation loss improvement. 
-                            Default: False
+            verbose (bool): If True, prints a message for each increase in stopping count
             delta (float): Minimum change in the monitored quantity to qualify as an improvement.
                             Default: 0
         """
@@ -35,7 +34,8 @@ class EarlyStopping:
             self.save_checkpoint(val_metric, model)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.verbose:
+                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -45,7 +45,10 @@ class EarlyStopping:
 
     def save_checkpoint(self, val_metric, model):
         '''Saves model when validation metric improves.'''
-        if self.verbose:
-            print(f'Validation loss decreased ({self.val_metric_min:.6f} --> {val_metric:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), 'checkpoint.pt')
+        print(f'Validation loss decreased ({self.val_metric_min:.6f} --> {val_metric:.6f}).  Saving model ...')
+        if type(model) == list:
+            for i, model in enumerate(model):
+                torch.save(model.state_dict(), 'checkpoint_{}.pt'.format(i))
+        else:
+            torch.save(model.state_dict(), 'checkpoint.pt')
         self.val_metric_min = val_metric
