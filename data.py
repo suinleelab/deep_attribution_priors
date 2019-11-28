@@ -10,15 +10,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-class Experiment:
-    def __init__(self, X, y, test_size=0.2):
-        self.X = X
-        self.y = y
-
-        split = TrainTestSplit.from_data(X, y, test_size=test_size)
-        self.train_dataset = BasicDataset(split.X_train, split.y_train)
-        self.test_dataset = BasicDataset(split.X_test, split.y_test)
-
 class BasicDataset(Dataset):
     def __init__(self, X, y):
         self.X = X

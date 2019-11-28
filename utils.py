@@ -1,71 +1,51 @@
-import logging
-from prior import StaticFeatureAttributionPrior
-from torch.utils.data import DataLoader
+import torch
 import numpy as np
-import torch.optim as optim
-from egexplainer import ExpectedGradientsModel
+from IPython.core.debugger import set_trace
 
 
-def train(model,
-          epochs: int,
-          training_data: DataLoader,
-          test_data: DataLoader,
-          attribution_prior: StaticFeatureAttributionPrior):
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=1e-5,
-        weight_decay=1e-4
-    )
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience."""
+    def __init__(self, patience=7, verbose=False, delta=0, minimize=True):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement. 
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_metric_min = np.Inf
+        self.delta = delta
+        self.minimize = minimize
 
-    if attribution_prior is not None:
-        logging.info("Training model using\n{}\nfor prior penalty".format(attribution_prior.prior_feature))
-    else:
-        logging.info("Training model with no attribution prior")
-    for epoch in range(epochs):
-        model.train()
+    def __call__(self, val_metric, model):
 
-        train_model_errors = []
-        train_prior_penalties = []
-        valid_losses = []
+        score = val_metric
+        if self.minimize:
+            score *= -1
 
-        # Train
-        for i, (features, labels) in enumerate(training_data):
-            features, labels = features.cuda().float(), labels.cuda().float()
-            optimizer.zero_grad()
-
-            #pdb.set_trace()
-
-            if attribution_prior is not None:
-                outputs, shaps = model(features)
-                model_error = model.base.criterion(outputs, labels)
-                prior_penalty = attribution_prior.penalty(shaps)
-                train_prior_penalties.append(prior_penalty.mean().item())
-                loss = model_error + prior_penalty
-            else:
-                outputs = model(features)
-                model_error = model.criterion(outputs, labels)
-                loss = model_error
-            loss = loss.mean()
-            loss.backward()
-            optimizer.step()
-            train_model_errors.append(model_error.mean().item())
-
-        # Validation
-        for i, (features, labels) in enumerate(test_data):
-            features, labels = features.cuda().float(), labels.cuda().float()
-            if isinstance(model, ExpectedGradientsModel):
-                outputs, shaps = model(features)
-                valid_losses.append(model.base.criterion(outputs, labels).mean().detach().cpu().numpy())
-            else:
-                outputs = model(features)
-                valid_losses.append(model.criterion(outputs, labels).mean().detach().cpu().numpy())
-
-
-        valid_loss = np.mean(valid_losses)
-        if attribution_prior is not None:
-            logging.info("Epoch {}, Training Model Error {}, Training Prior Penalty {}, Validation Error {}".format(
-                epoch, np.mean(train_model_errors), np.mean(train_prior_penalties), valid_loss))
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_metric, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
         else:
-            logging.info("{}, {}, {}".format(epoch, np.mean(train_model_errors), valid_loss))
+            self.best_score = score
+            self.save_checkpoint(val_metric, model)
+            self.counter = 0
 
-    return valid_loss
+    def save_checkpoint(self, val_metric, model):
+        '''Saves model when validation metric improves.'''
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_metric_min:.6f} --> {val_metric:.6f}).  Saving model ...')
+        torch.save(model.state_dict(), 'checkpoint.pt')
+        self.val_metric_min = val_metric
