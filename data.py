@@ -59,18 +59,15 @@ def generate_two_moons_data(n_noisy_dimensions):
     
     return train_loader, valid_loader, test_loader
 
-class TrainTestSplit:
-    def __init__(self, X_train, X_test, y_train, y_test):
-        super(TrainTestSplit, self).__init__()
+class TrainTestValidSplit:
+    def __init__(self, X_train, X_test, X_valid, y_train, y_test, y_valid):
+        super(TrainTestValidSplit, self).__init__()
         self.X_train = X_train
         self.X_test = X_test
+        self.X_valid = X_valid
         self.y_train = y_train
         self.y_test = y_test
-
-    @staticmethod
-    def from_data(X, y, test_size):
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size)
-        return TrainTestSplit(X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
+        self.y_valid = y_valid
 
 
 class PriorData(Dataset):
@@ -149,28 +146,33 @@ class ExVivoDrugData(ResponseData):
     # Split by patient
     def kfold_patient_split(self, n_splits):
         logging.info("Splitting drug response data into {} folds".format(n_splits))
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        kf = KFold(n_splits=n_splits)
         patient_ids = self.X.patient_id.unique()
-        train_test_splits = []
+        train_test_valid_splits = []
 
         for train_patient_idxs, test_patient_idxs, in kf.split(patient_ids):
+            valid_patient_idxs, test_patient_idxs = train_test_split(test_patient_idxs, test_size=0.5)
 
             train_patient_ids = patient_ids[train_patient_idxs]
+            valid_patient_ids = patient_ids[valid_patient_idxs]
             test_patient_ids = patient_ids[test_patient_idxs]
 
             X_train, y_train = self.data_for_patients(train_patient_ids)
             X_test, y_test = self.data_for_patients(test_patient_ids)
+            X_valid, y_valid = self.data_for_patients(valid_patient_ids)
 
-            train_test_splits.append(
-                TrainTestSplit(
+            train_test_valid_splits.append(
+                TrainTestValidSplit(
                     X_train=X_train,
                     X_test=X_test,
+                    X_valid=X_valid,
                     y_train=y_train,
                     y_test=y_test,
+                    y_valid=y_valid
                 )
             )
         logging.info("Splitting complete")
-        return train_test_splits
+        return train_test_valid_splits
 
     def data_for_patients(self, patient_ids):
         X_for_patients = self.X[self.X.patient_id.isin(patient_ids)]
