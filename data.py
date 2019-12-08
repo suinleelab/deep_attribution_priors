@@ -12,6 +12,7 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+
 class BasicDataset(Dataset):
     def __init__(self, X, y):
         self.X = X
@@ -24,14 +25,14 @@ class BasicDataset(Dataset):
         sample = self.X[index]
         sample_label = self.y[index]
         return sample, sample_label
-    
-    
+
+
 def generate_two_moons_data(n_noisy_dimensions):
     n_samples = 1000
     batch_size = 32
     X, y = datasets.make_moons(n_samples=n_samples, noise=0.1)
     X = (X).astype(np.float32)
-    
+
     noise_mean = 0
     noise_var = 1.0
     noise = np.random.normal(
@@ -39,7 +40,7 @@ def generate_two_moons_data(n_noisy_dimensions):
         scale=noise_var,
         size=(n_samples, n_noisy_dimensions)
     )
-    
+
     X_with_noise = np.concatenate((X, noise), axis=1)
     X_with_noise = X_with_noise.astype(np.float32)
 
@@ -56,8 +57,9 @@ def generate_two_moons_data(n_noisy_dimensions):
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
     valid_loader = DataLoader(valid_dataset, batch_size=y_valid.shape[0])
     test_loader = DataLoader(test_dataset, batch_size=y_test.shape[0])
-    
+
     return train_loader, valid_loader, test_loader
+
 
 class TrainTestValidSplit:
     def __init__(self, X_train, X_test, X_valid, y_train, y_test, y_valid):
@@ -179,7 +181,7 @@ class ExVivoDrugData(ResponseData):
         y_for_patients = self.y[self.y.patient_id.isin(patient_ids)]
         return X_for_patients, y_for_patients
 
-    #FIXME
+    # FIXME
     # We're loading the patient ID here, but then tossing it once we look at specific train/test splits.
     # Would be nice to have a better abstraction that captures this, so that we don't accidentally have ids
     # in places we shouldn't (or vice-versa)
@@ -192,4 +194,3 @@ class ExVivoDrugData(ResponseData):
         y = final_frame[["patient_id", "IC50"]]
         logging.info("Drug response data loaded")
         return ExVivoDrugData(X=X, y=y)
-
