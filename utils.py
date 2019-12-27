@@ -3,6 +3,8 @@ import numpy as np
 import time
 import datetime
 from IPython.core.debugger import set_trace
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 class EarlyStopping:
@@ -206,3 +208,26 @@ def train_with_learned_prior(
         correct_predictions = (predicted_classes == y_batch).float()
         accuracy = (correct_predictions.sum() / correct_predictions.shape[0]).item()
     return accuracy
+
+def metafeature_pdp(
+    metafeatures,
+    feature_to_alter,
+    meta_range,
+    color,
+    model,
+    xlabel="Predicted Attribution Value",
+    ylabel="Metafeature",
+):
+    sns.set_style("darkgrid")
+    meta_copy = metafeatures.copy()
+    predicted_attributions_new_meta = []
+    
+    for new_meta_val in meta_range:
+        meta_copy[feature_to_alter] = new_meta_val
+        predicted_attributions_altered_feature = model(torch.FloatTensor(meta_copy.values).cuda()).abs()
+        predicted_attributions_new_meta.append(predicted_attributions_altered_feature.mean().item())
+    plt.plot(meta_range, predicted_attributions_new_meta, color=color)
+    plt.xlabel(xlabel, fontsize=14)
+    plt.xticks(fontsize=14)
+    plt.ylabel(ylabel, fontsize=14)
+    plt.yticks(fontsize=14)
