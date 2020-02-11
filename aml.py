@@ -3,7 +3,7 @@ import data
 import datetime
 import time
 from utils import EarlyStopping
-from models import MLP
+from models import MLP, LinearModel
 from torch import optim
 from sklearn.preprocessing import StandardScaler
 from torch.nn import MSELoss
@@ -123,7 +123,7 @@ def train_with_learned_prior(f1, f2, f1_optimizer, f2_optimizer, prior_info):
 
             eg = APExp.shap_values(f1, X_batch).abs()
             prior_differences = f2(prior_info).squeeze()
-            prior_loss = ((prior_differences - eg) ** 2).mean()
+            prior_loss = (prior_differences - eg).abs().mean()
 
             loss_train = criterion(output, y_batch) + prior_loss
 
@@ -156,6 +156,60 @@ def train_with_learned_prior(f1, f2, f1_optimizer, f2_optimizer, prior_info):
 
         output = f1(X_batch)
         loss_test = criterion(output, y_batch).item()
+    return loss_test
+
+def train_with_merge_algo(f1, f2, f1_optimizer, f2_optimizer, prior_info):
+    print("Beginning model training at {}".format(datetime.datetime.now()))
+    early_stopping = EarlyStopping(patience=patience)
+    epoch = 0
+    while True:
+        start_time = time.time()
+        f1.train()
+        for X_batch, y_batch in train_loader:
+            f1_optimizer.zero_grad()
+            f2_optimizer.zero_grad()
+
+            X_batch = X_batch.float().cuda()
+            y_batch = y_batch.float().cuda()
+
+            output = f1(X_batch)
+
+            prior_differences = f2(prior_info).squeeze()
+            prior_loss = (prior_differences - f1.layers[0].weight).abs().mean()
+
+            loss_train = criterion(output, y_batch) + prior_loss
+
+            loss_train.backward()
+            f1_optimizer.step()
+            f2_optimizer.step()
+
+        f1.eval()
+        for X_batch, y_batch in valid_loader:
+            X_batch = X_batch.float().cuda()
+            y_batch = y_batch.float().cuda()
+
+            output = f1(X_batch)
+            loss_valid = criterion(output, y_batch).item()
+            end_time = time.time()
+            epoch_time = end_time - start_time
+
+        if epoch % 10 == 0:
+            logging.info("Epoch {} completed in {} secs with valid loss {:.4f}".format(epoch, epoch_time, loss_valid))
+
+        early_stopping(loss_valid, [f1, f2])
+        if early_stopping.early_stop:
+            print("Early stopping on epoch {}".format(epoch))
+            break
+        epoch += 1
+
+    f1.load_state_dict(torch.load('checkpoint_0.pt'))
+    for X_batch, y_batch in test_loader:
+        X_batch = X_batch.float().cuda()
+        y_batch = y_batch.float().cuda()
+
+        output = f1(X_batch)
+        loss_test = criterion(output, y_batch).item()
+        logging.info("Test loss {}".format(loss_test))
     return loss_test
 
 
@@ -225,6 +279,30 @@ learning_rate_no_prior = 1e-3
 learning_rate_with_prior = 1e-3
 prior_learning_rate = 5e-5
 
+"""
+test_errors_merge_algo = []
+prior_info = merge_data.data.T
+prior_info = torch.FloatTensor(prior_info.values).cuda()
+for train_loader, test_loader, valid_loader in data_loaders:
+    D_in, D_out = X_train.shape[1], 1
+    f1 = LinearModel(D_in=D_in, D_out=D_out).cuda().float()
+    f1_optimizer = optim.Adam(f1.parameters(), lr=5e-5)
+
+    f2 = LinearModel(
+        D_in=prior_info.shape[1],
+        D_out=1,
+    ).cuda().float()
+
+    f2_optimizer = optim.Adam(f2.parameters(), lr=5e-5)
+
+    test_errors_merge_algo.append(train_with_merge_algo(f1, f2, f1_optimizer, f2_optimizer, prior_info))
+
+aml_results_dir = "./aml_results/"
+if not os.path.exists(aml_results_dir):
+    os.makedirs(aml_results_dir)
+
+pickle.dump(test_errors_merge_algo, open("{}/test_errors_merge_algo.p".format(aml_results_dir), "wb"))
+
 for train_loader, test_loader, valid_loader in data_loaders:
     D_in, H1, H2, D_out = train_loader.dataset.X.shape[1], 512, 256, 1
     f1_no_prior = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=0).cuda().float()
@@ -284,7 +362,7 @@ for train_loader, test_loader, valid_loader in data_loaders:
     test_errors_random_prior.append(train_with_learned_prior(
         f1_random_prior, f2_random_prior, f1_random_prior_optimizer, f2_random_prior_optimizer, prior_info))
 
-
+"""
 logging.info("Training LASSO baseline...")
 from sklearn import linear_model
 
@@ -305,6 +383,8 @@ for alpha in tqdm(potential_alphas):
         best_alpha = alpha
         best_mse_sum = mse_sum
 
+logging.info("Best alpha: {}".format(best_alpha))
+exit(1)
 test_lasso_errors = []
 
 for train_loader, test_loader, valid_loader in data_loaders:

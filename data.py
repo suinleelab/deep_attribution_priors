@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset
+import torch
 import pickle
 import pandas as pd
 import logging
@@ -180,3 +181,20 @@ class ADData(Dataset):
             return sample, self.y[index]
         else:
             return sample
+
+
+class NetflixDataset(Dataset):
+
+    def __init__(self, csv, transform=None):
+        df = pd.read_csv(csv)
+        self.length = len(df)
+        self.y = torch.FloatTensor(df['rating'].values)
+        self.x = torch.LongTensor(df.drop('rating', axis=1).values)
+        self.transform = transform
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        sample = {'x': self.x[index], 'y': self.y[index]}
+        return sample
