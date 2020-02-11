@@ -9,50 +9,10 @@ import pickle
 import os
 import logging
 from scipy.stats import sem
-from sklearn import datasets
-from data import BasicDataset
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader
+from utils import configure_logging
+from data import generate_two_moons_data
 
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-
-def generate_two_moons_data(n_noisy_dimensions):
-    n_samples = 1000
-    batch_size = 32
-    X, y = datasets.make_moons(n_samples=n_samples, noise=0.1)
-    X = (X).astype(np.float32)
-
-    noise_mean = 0
-    noise_var = 1.0
-    noise = np.random.normal(
-        loc=noise_mean,
-        scale=noise_var,
-        size=(n_samples, n_noisy_dimensions)
-    )
-
-    X_with_noise = np.concatenate((X, noise), axis=1)
-    X_with_noise = X_with_noise.astype(np.float32)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_with_noise, y, test_size=0.8
-    )
-
-    X_valid, X_test, y_valid, y_test = train_test_split(X_test, y_test, test_size=0.5)
-
-    train_dataset = BasicDataset(X_train, y_train)
-    valid_dataset = BasicDataset(X_valid, y_valid)
-    test_dataset = BasicDataset(X_test, y_test)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size)
-    valid_loader = DataLoader(valid_dataset, batch_size=y_valid.shape[0])
-    test_loader = DataLoader(test_dataset, batch_size=y_test.shape[0])
-
-    return train_loader, valid_loader, test_loader
+configure_logging()
 
 nuisance_dim_values = [x for x in range(50, 1000+1, 50)]
 
@@ -76,36 +36,23 @@ for num_nuisance_dims in nuisance_dim_values:
     for i in range(0, num_experiments):
         train_loader, valid_loader, test_loader = generate_two_moons_data(n_noisy_dimensions=num_nuisance_dims)
 
-        if num_nuisance_dims == 0:
-            D_in = train_loader.dataset.X.shape[1]
-            f1 = LinearModel(D_in=D_in, D_out=2).cuda()
-        else:
-            D_in = train_loader.dataset.X.shape[1]
-            H1 = D_in // 4
-            H2 = H1 // 2
-            D_out = 2
+        D_in = train_loader.dataset.X.shape[1]
+        H1 = D_in // 4
+        H2 = H1 // 2
+        D_out = 2
 
-            f1 = MLP(
-                D_in=D_in,
-                H1=H1,
-                H2=H2,
-                D_out=D_out,
-                dropout=dropout
-            ).cuda()
+        f1 = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=dropout).cuda()
 
         f1_optimizer = optim.Adam(f1.parameters(), lr=learning_rate, weight_decay=5e-3)
         losses_no_prior.append(
             train(f1, f1_optimizer, CrossEntropyLoss(), train_loader, valid_loader, test_loader, patience=100)
         )
 
-        if num_nuisance_dims == 0:
-            f1 = LinearModel(D_in=D_in, D_out=2).cuda()
-        else:
-            D_in = train_loader.dataset.X.shape[1]
-            H1 = D_in // 4
-            H2 = H1 // 2
-            D_out = 2
-            f1 = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=dropout).cuda()
+        D_in = train_loader.dataset.X.shape[1]
+        H1 = D_in // 4
+        H2 = H1 // 2
+        D_out = 2
+        f1 = MLP(D_in=D_in, H1=H1, H2=H2, D_out=D_out, dropout=dropout).cuda()
 
         f1_optimizer = optim.Adam(f1.parameters(), lr=learning_rate, weight_decay=5e-3)
 

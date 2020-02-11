@@ -2,8 +2,21 @@ import torch
 import numpy as np
 import time
 import datetime
-import seaborn as sns
-import matplotlib.pyplot as plt
+from torch.utils.data import Dataset
+import logging
+
+class BasicDataset(Dataset):
+    def __init__(self, X, y):
+        self.X = X
+        self.y = y
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, index):
+        sample = self.X[index]
+        sample_label = self.y[index]
+        return sample, sample_label
 
 
 class EarlyStopping:
@@ -58,6 +71,13 @@ class EarlyStopping:
         self.val_metric_min = val_metric
 
 
+def configure_logging():
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        level=logging.INFO,
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
 def train(model, optimizer, criterion, train_loader, valid_loader, test_loader, patience):
     print("Beginning model training at {}".format(datetime.datetime.now()))
 
@@ -100,8 +120,6 @@ def train(model, optimizer, criterion, train_loader, valid_loader, test_loader, 
                                                                                                       loss_valid,
                                                                                                       accuracy))
         epoch += 1
-        # early_stopping needs the validation loss to check if it has decreased,
-        # and if it has, it will make a checkpoint of the current model
         early_stopping(accuracy, model)
 
         if early_stopping.early_stop:
@@ -158,7 +176,6 @@ def train_with_learned_prior(
             eg = explainer.shap_values(f1, X_batch, sparse_labels=y_batch)
             prior_differences = f2(prior_info).squeeze()
 
-            # This works pretty well! Why?
             prior_loss = (prior_differences - eg).abs().mean()
             train_loss = classification_loss + prior_loss
 
@@ -185,8 +202,6 @@ def train_with_learned_prior(
             print("Epoch {} completed in {} secs with test loss, accuracy {:.4f},{:.4f}".format(epoch, epoch_time,
                                                                                                 loss_valid, accuracy))
 
-        # early_stopping needs the validation loss to check if it has decreased,
-        # and if it has, it will make a checkpoint of the current model
         early_stopping(accuracy, [f1, f2])
         epoch += 1
         if early_stopping.early_stop:
@@ -207,26 +222,3 @@ def train_with_learned_prior(
         correct_predictions = (predicted_classes == y_batch).float()
         accuracy = (correct_predictions.sum() / correct_predictions.shape[0]).item()
     return accuracy
-
-def metafeature_pdp(
-    metafeatures,
-    feature_to_alter,
-    meta_range,
-    color,
-    model,
-    xlabel="Predicted Attribution Value",
-    ylabel="Metafeature",
-):
-    sns.set_style("darkgrid")
-    meta_copy = metafeatures.copy()
-    predicted_attributions_new_meta = []
-    
-    for new_meta_val in meta_range:
-        meta_copy[feature_to_alter] = new_meta_val
-        predicted_attributions_altered_feature = model(torch.FloatTensor(meta_copy.values).cuda()).abs()
-        predicted_attributions_new_meta.append(predicted_attributions_altered_feature.mean().item())
-    plt.plot(meta_range, predicted_attributions_new_meta, color=color)
-    plt.xlabel(xlabel, fontsize=14)
-    plt.xticks(fontsize=14)
-    plt.ylabel(ylabel, fontsize=14)
-    plt.yticks(fontsize=14)
